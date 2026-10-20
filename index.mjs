@@ -1,5 +1,8 @@
 const AI_SDK = "@ai-sdk/openai-compatible";
-const MODEL_DISCOVERY_TIMEOUT_MS = 8000;
+const MODEL_DISCOVERY_WAIT_MS = 3000;
+const MODEL_DISCOVERY_TIMEOUT_MS = 30000;
+const discoveredModels = new Map();
+const modelRequests = new Map();
 
 const ENDPOINTS = {
   kepler: {
@@ -108,6 +111,19 @@ function modelRows(payload) {
   return [];
 }
 
+function modelsFromRows(rows, seeds, prior) {
+  return Object.fromEntries(rows.flatMap((row) => {
+    const id = typeof row === "string" ? row : String(row?.id ?? "").trim();
+    if (!id) return [];
+    const base = seeds[id] ?? prior[id] ?? modelDefinition(id);
+    return [[id, {
+      ...base,
+      id,
+      name: row?.name ?? row?.display_name ?? row?.title ?? base.name ?? id,
+    }]];
+  }));
+}
+
 function makeProviderPlugin(endpoint, options) {
   const configured = endpointConfig(endpoint, options);
   const seeds = modelSeeds(configured, options);
@@ -154,7 +170,7 @@ function makeProviderPlugin(endpoint, options) {
 
     provider: {
       id: configured.id,
-      async models(provider) {
+      async models(provider, { auth } = {}) {
         const fallback = () => {
           const models = Object.keys(seeds).length ? seeds : (provider.models ?? {});
           if (!Object.keys(models).length) return undefined;
@@ -163,40 +179,41 @@ function makeProviderPlugin(endpoint, options) {
           return list;
         };
 
-        try {
-          const response = await fetch(`${configured.baseURL}/models`, {
-            method: "GET",
-            signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS),
-          });
-          if (!response.ok) {
-            const existing = fallback();
-            if (existing) return existing;
-            throw new Error(`${configured.name} /models returned HTTP ${response.status}.`);
-          }
+        const cacheKey = `${configured.id}:${configured.baseURL}:${auth?.accountId ?? "default"}`;
+        const cached = discoveredModels.get(cacheKey);
+        if (cached) return cached;
 
-          const rows = modelRows(await response.json());
-          if (!rows.length) {
-            const existing = fallback();
-            if (existing) return existing;
-            throw new Error(`${configured.name} /models returned no model IDs.`);
-          }
-
-          const prior = provider.models ?? {};
-          return Object.fromEntries(rows.flatMap((row) => {
-            const id = typeof row === "string" ? row : String(row?.id ?? "").trim();
-            if (!id) return [];
-            const base = seeds[id] ?? prior[id] ?? modelDefinition(id);
-            return [[id, {
-              ...base,
-              id,
-              name: row?.name ?? row?.display_name ?? row?.title ?? base.name ?? id,
-            }]];
-          }));
-        } catch (error) {
-          const existing = fallback();
-          if (existing) return existing;
-          throw error;
+        let request = modelRequests.get(cacheKey);
+        if (!request) {
+          request = (async () => {
+            try {
+              const response = await fetch(`${configured.baseURL}/models`, {
+                method: "GET",
+                signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS),
+              });
+              if (!response.ok) return undefined;
+              const rows = modelRows(await response.json());
+              if (!rows.length) return undefined;
+              const models = modelsFromRows(rows, seeds, provider.models ?? {});
+              if (!Object.keys(models).length) return undefined;
+              discoveredModels.set(cacheKey, models);
+              return models;
+            } catch {
+              return undefined;
+            } finally {
+              modelRequests.delete(cacheKey);
+            }
+          })();
+          modelRequests.set(cacheKey, request);
         }
+
+        let timer;
+        await Promise.race([
+          request,
+          new Promise((resolve) => { timer = setTimeout(resolve, MODEL_DISCOVERY_WAIT_MS); }),
+        ]);
+        if (timer) clearTimeout(timer);
+        return discoveredModels.get(cacheKey) ?? fallback();
       },
     },
   };
