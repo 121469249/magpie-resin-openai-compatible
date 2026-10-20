@@ -1,0 +1,20 @@
+{
+  "name": "magpie-resin-openai-compatible",
+  "version": "0.1.0",
+  "description": "Magpie providers for no-key OpenAI-compatible APIs routed through Resin",
+  "type": "module",
+  "main": "./index.mjs",
+  "files": ["index.mjs", "README.md"],
+  "keywords": [
+    "magpie",
+    "magpie-plugin",
+    "provider",
+    "auth",
+    "openai-compatible",
+    "resin"
+  ],
+  "license": "MIT",
+  "magpie": {
+    "maxConcurrency": 4
+  }
+}
