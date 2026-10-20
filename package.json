@@ -1,6 +1,6 @@
 {
   "name": "magpie-resin-openai-compatible",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Magpie providers for no-key OpenAI-compatible APIs routed through Resin",
   "type": "module",
   "main": "./index.mjs",
