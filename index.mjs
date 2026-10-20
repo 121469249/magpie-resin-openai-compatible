@@ -72,41 +72,18 @@ function endpointConfig(endpoint, options) {
   return { ...endpoint, baseURL: cleanBaseURL(baseURL) };
 }
 
-function resinProxyURL(endpoint) {
-  const suffix = endpoint.key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toUpperCase();
-  const proxy = String(
-    process.env[`MAGPIE_RESIN_PROXY_URL_${suffix}`]
-      || process.env.MAGPIE_RESIN_PROXY_URL
-      || "",
-  ).trim();
-  if (!proxy) {
-    throw new Error(
-      `Resin is required for this plugin. Set MAGPIE_RESIN_PROXY_URL${suffix ? `_${suffix}` : ""} to your Resin HTTP proxy URL.`,
-    );
-  }
-
-  const proxyURL = new URL(proxy);
-  if (proxyURL.protocol !== "http:" && proxyURL.protocol !== "https:") {
-    throw new Error("MAGPIE_RESIN_PROXY_URL must use an http or https proxy URL.");
-  }
-  if (proxyURL.pathname !== "/" || proxyURL.search || proxyURL.hash) {
-    throw new Error("MAGPIE_RESIN_PROXY_URL must contain only the proxy origin and optional credentials.");
-  }
-  return proxy;
-}
-
-async function fetchThroughResin(endpoint, input, init) {
-  const proxy = resinProxyURL(endpoint);
+async function fetchWithoutAPIKey(input, init) {
   const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
   for (const name of AUTH_HEADERS) headers.delete(name);
 
   try {
-    return await fetch(input, { ...init, headers, proxy });
+    // Magpie applies the proxy configured for this provider/account to the
+    // host's standard fetch. Passing a custom `proxy` option here would bypass it.
+    return await fetch(input, { ...init, headers });
   } catch (error) {
     const message = String(error?.message ?? error)
-      .replaceAll(proxy, "[configured Resin proxy]")
       .replace(/https?:\/\/[^/\s@]+@/g, "http://[proxy credentials]@");
-    throw new Error(`Request through Resin failed: ${message}`);
+    throw new Error(`Request through Magpie failed: ${message}`);
   }
 }
 
@@ -156,7 +133,7 @@ function makeProviderPlugin(endpoint, options) {
       async loader() {
         return {
           baseURL: configured.baseURL,
-          fetch: (input, init) => fetchThroughResin(configured, input, init),
+          fetch: fetchWithoutAPIKey,
         };
       },
     },
@@ -171,11 +148,7 @@ function makeProviderPlugin(endpoint, options) {
         };
 
         try {
-          const response = await fetchThroughResin(
-            configured,
-            `${configured.baseURL}/models`,
-            { method: "GET" },
-          );
+          const response = await fetch(`${configured.baseURL}/models`, { method: "GET" });
           if (!response.ok) {
             const existing = fallback();
             if (existing) return existing;
