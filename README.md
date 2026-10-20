@@ -30,7 +30,7 @@ github:121469249/magpie-resin-openai-compatible
 
 ## 模型列表
 
-插件会尝试从每个接口的 `GET /models` 自动发现模型，最长等待 8 秒。请求超时或接口暂时不可用时，会保留内置的备用模型列表；如果某个接口没有实现此路由，也可手动指定实际模型 ID：
+插件会尝试从每个接口的 `GET /models` 自动发现模型。为避免慢接口拖住 Magpie，首次最多等待 3 秒并先显示内置备用模型，后台仍会继续拉取；等待几秒后再次点击「重新获取模型」，即可加载已拉取到的完整列表。接口暂时不可用时会保留备用模型；如果某个接口没有实现此路由，也可手动指定实际模型 ID：
 
 ```sh
 magpie plugin options magpie-resin-openai-compatible '{"models":{"kepler":["实际模型 ID"],"g4fGemini":["实际模型 ID"],"pollinations":["实际模型 ID"]}}'
