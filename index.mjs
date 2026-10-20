@@ -156,9 +156,11 @@ function makeProviderPlugin(endpoint, options) {
       id: configured.id,
       async models(provider) {
         const fallback = () => {
-          if (Object.keys(seeds).length) return seeds;
-          if (Object.keys(provider.models ?? {}).length) return provider.models;
-          return undefined;
+          const models = Object.keys(seeds).length ? seeds : (provider.models ?? {});
+          if (!Object.keys(models).length) return undefined;
+          const list = { ...models };
+          list[Symbol.for("magpie.fellBack")] = true;
+          return list;
         };
 
         try {
