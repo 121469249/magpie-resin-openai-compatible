@@ -22,15 +22,11 @@ github:121469249/magpie-resin-openai-compatible
 
 插件给每个供应商提供「无需 API Key」登录操作，用于在 Magpie 中登记无密钥账号；这一步不会填写空字符串或伪造 key。
 
-## 配置 Resin
+## 配置代理
 
-插件通过 Resin 的 HTTP 转发代理访问上游。启动 Magpie 前设置代理 URL：
+插件使用 Magpie 自带的代理设置访问上游，不需要设置插件专用的 Resin 环境变量。请在每个供应商的编辑窗口中选择「代理」，设置 Resin 地址，然后保存。
 
-```sh
-export MAGPIE_RESIN_PROXY_URL='http://<用户名>:<代理令牌>@<Resin 地址>:<端口>'
-```
-
-请替换为 Resin 的代理地址和凭据。代理 URL 含有凭据，请妥善保管。插件会把它作为 Bun `fetch` 的 `proxy` 选项使用；Resin 用户名中的 `Platform.Account` 决定粘性账号。可以为各供应商分别设置代理 URL，例如 `MAGPIE_RESIN_PROXY_URL_KEPLER`、`MAGPIE_RESIN_PROXY_URL_G4F_GEMINI` 和 `MAGPIE_RESIN_PROXY_URL_POLLINATIONS`。未设置代理 URL 时，请求会报错，不会悄悄直连上游。请在启动 Magpie 的同一环境中设置变量。
+供应商请求和 `/models` 列表请求都使用 Magpie 的标准 `fetch`，因此会遵从该供应商或账号的代理设置。将代理设为「直连」时，Magpie 会按直连方式访问。
 
 ## 模型列表
 
