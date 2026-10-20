@@ -1,4 +1,5 @@
 const AI_SDK = "@ai-sdk/openai-compatible";
+const MODEL_DISCOVERY_TIMEOUT_MS = 8000;
 
 const ENDPOINTS = {
   kepler: {
@@ -7,6 +8,12 @@ const ENDPOINTS = {
     name: "OVH Kepler (no key)",
     baseURL: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
     modelsEnv: "MAGPIE_MODELS_KEPLER",
+    fallbackModels: [
+      "Qwen3.5-9B",
+      "Qwen3.8-27B",
+      "gpt-oss-20b",
+      "Mistral-Nemo-Instruct-2407",
+    ],
   },
   g4fGemini: {
     id: "resin-g4f-gemini",
@@ -14,6 +21,10 @@ const ENDPOINTS = {
     name: "G4F Gemini (no key)",
     baseURL: "https://g4f.space/api/gemini-v1beta",
     modelsEnv: "MAGPIE_MODELS_G4F_GEMINI",
+    fallbackModels: [
+      "models/gemini-3.5-flash-lite",
+      "models/gemini-2.5-flash",
+    ],
   },
   pollinations: {
     id: "resin-pollinations",
@@ -21,6 +32,7 @@ const ENDPOINTS = {
     name: "Pollinations (no key)",
     baseURL: "https://gen.pollinations.ai/v1",
     modelsEnv: "MAGPIE_MODELS_POLLINATIONS",
+    fallbackModels: ["openai/gpt-5.4-nano"],
   },
 };
 
@@ -60,7 +72,9 @@ function modelSeeds(endpoint, options) {
   const optionIds = endpoint.key === "custom"
     ? options?.custom?.modelIds
     : options?.models?.[endpoint.key];
-  const ids = parseModelIds(optionIds ?? process.env[endpoint.modelsEnv]);
+  const ids = parseModelIds(
+    optionIds ?? process.env[endpoint.modelsEnv] ?? endpoint.fallbackModels,
+  );
   return Object.fromEntries(ids.map((id) => [id, modelDefinition(id)]));
 }
 
@@ -148,7 +162,10 @@ function makeProviderPlugin(endpoint, options) {
         };
 
         try {
-          const response = await fetch(`${configured.baseURL}/models`, { method: "GET" });
+          const response = await fetch(`${configured.baseURL}/models`, {
+            method: "GET",
+            signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS),
+          });
           if (!response.ok) {
             const existing = fallback();
             if (existing) return existing;
@@ -167,7 +184,11 @@ function makeProviderPlugin(endpoint, options) {
             const id = typeof row === "string" ? row : String(row?.id ?? "").trim();
             if (!id) return [];
             const base = seeds[id] ?? prior[id] ?? modelDefinition(id);
-            return [[id, { ...base, id, name: row?.name ?? base.name ?? id }]];
+            return [[id, {
+              ...base,
+              id,
+              name: row?.name ?? row?.display_name ?? row?.title ?? base.name ?? id,
+            }]];
           }));
         } catch (error) {
           const existing = fallback();
